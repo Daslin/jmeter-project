@@ -1,0 +1,51 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+- main
+
+schedules:
+- cron: "0 22 * * *"
+  displayName: Run every day at 10pm
+  branches:
+    include:
+    - main
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+- script: |
+    wget -c https://dlcdn.apache.org//jmeter/binaries/apache-jmeter-5.4.3.tgz
+    tar -xf apache-jmeter-5.4.3.tgz
+  displayName: 'Install the dependency packages'
+  
+- script: |
+        apache-jmeter-5.4.3/bin/./jmeter -Jjmeter.reportgenerator.overall_granularity=1000 -n -t Sekure.jmx -l results/results.jtl -j results/output.log -e -o report
+  displayName: 'Run JMeter'
+
+- script: |
+    JMETER_RESULTS=results/results.jtl
+    JUNIT_RESULTS=output.xml
+    python3 jtl_junit_converter.py $JMETER_RESULTS $JUNIT_RESULTS
+  displayName: 'RESULTS: Convert JMeter Results to JUnit Format'
+
+- task: PublishTestResults@2
+  inputs:
+    testResultsFormat: 'JUnit'
+    testResultsFiles: 'output.xml'
+    failTaskOnFailedTests: true
+  displayName: 'RESULTS: Publish Load Testing Results'
+
+- publish: $(System.DefaultWorkingDirectory)/results
+  artifact: jmeter-results
+  condition: succeededOrFailed()
+  displayName: 'RESULTS: Publish Load Test Artifacts'
+  
+- task: PublishPipelineArtifact@1
+  displayName: 'Publish JMeter HTML Report'
+  inputs:
+    targetPath: report
+    artifact: jmeter-report
